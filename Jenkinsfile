@@ -85,40 +85,36 @@ pipeline {
 
         // ── STAGE 5: TEST ──────────────────────────────────────────────────
         stage('Test') {
-            steps {
-                echo '=== Building test container ==='
-                dir("${TEST_DIR}") {
-                    sh 'docker build -t selenium-tests:latest .'
-                }
-
-                echo '=== Running Selenium tests ==='
-                sh '''
-                    docker run \
-                        --name ${TEST_CONTAINER} \
-                        --network host \
-                        -e BASE_URL=http://localhost:${APP_PORT} \
-                        selenium-tests:latest \
-                    || true
-
-                    echo "=== Copying test results ==="
-                    docker cp ${TEST_CONTAINER}:/tests/test-results ./test-results 2>/dev/null || true
-                '''
-            }
-            post {
-                always {
-                    // Archive HTML report
-                    publishHTML(target: [
-                        allowMissing:          true,
-                        alwaysLinkToLastBuild: true,
-                        keepAll:               true,
-                        reportDir:             'test-results',
-                        reportFiles:           'report.html',
-                        reportName:            'Selenium Test Report'
-                    ])
-                }
-            }
+    steps {
+        echo '=== Running Selenium tests ==='
+        sh '''
+            docker run --rm \
+                --name ${TEST_CONTAINER} \
+                --network host \
+                -e BASE_URL=http://localhost:${APP_PORT} \
+                -v $(pwd)/tests:/tests \
+                -w /tests \
+                python:3.11-slim \
+                bash -c "pip install -q selenium pytest pytest-html && \
+                         apt-get update -q && apt-get install -y -q chromium chromium-driver && \
+                         mkdir -p test-results && \
+                         pytest test_tasks.py -v --html=test-results/report.html --self-contained-html || true"
+        '''
+        sh 'docker cp ${TEST_CONTAINER}:/tests/test-results ./test-results 2>/dev/null || mkdir -p test-results'
+    }
+    post {
+        always {
+            publishHTML(target: [
+                allowMissing:          true,
+                alwaysLinkToLastBuild: true,
+                keepAll:               true,
+                reportDir:             'test-results',
+                reportFiles:           'report.html',
+                reportName:            'Selenium Test Report'
+            ])
         }
-
+    }
+}
         // ── STAGE 6: CLEANUP ───────────────────────────────────────────────
         stage('Cleanup') {
             steps {
