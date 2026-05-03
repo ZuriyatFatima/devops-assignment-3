@@ -84,11 +84,12 @@ pipeline {
         }
 
         // ── STAGE 5: TEST ──────────────────────────────────────────────────
-        stage('Test') {
+       stage('Test') {
     steps {
         echo '=== Running Selenium tests ==='
         sh '''
-            docker run --rm \
+            mkdir -p test-results
+            docker run \
                 --name ${TEST_CONTAINER} \
                 --network host \
                 -e BASE_URL=http://localhost:${APP_PORT} \
@@ -98,9 +99,10 @@ pipeline {
                 bash -c "pip install -q selenium pytest pytest-html && \
                          apt-get update -q && apt-get install -y -q chromium chromium-driver && \
                          mkdir -p test-results && \
-                         pytest test_tasks.py -v --html=test-results/report.html --self-contained-html || true"
+                         pytest test_tasks.py -v --html=test-results/report.html --self-contained-html || true" || true
+
+            docker cp ${TEST_CONTAINER}:/tests/test-results ./test-results 2>/dev/null || true
         '''
-        sh 'docker cp ${TEST_CONTAINER}:/tests/test-results ./test-results 2>/dev/null || mkdir -p test-results'
     }
     post {
         always {
@@ -114,8 +116,7 @@ pipeline {
             ])
         }
     }
-}
-        // ── STAGE 6: CLEANUP ───────────────────────────────────────────────
+}        // ── STAGE 6: CLEANUP ───────────────────────────────────────────────
         stage('Cleanup') {
             steps {
                 echo '=== Stopping and removing containers ==='
