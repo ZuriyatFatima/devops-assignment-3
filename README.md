@@ -1,1 +1,1 @@
-z
+zuriyat
